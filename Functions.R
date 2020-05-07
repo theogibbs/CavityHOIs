@@ -50,14 +50,9 @@ BuildA <- function(S = 50, mu_A = -2, sigma_A = 0.5, rho_A = 0) {
 BuildB <- function(mu_B = -2, sigma_B = 0.5, rho_B = 0, mu_A = -2, A) {
   
   S <- nrow(A)
-<<<<<<< HEAD
   scaled_mu_B <- mu_B / S^2
   scaled_sigma_B <- sigma_B / S
-=======
-  scaled_mu_B <- mu_B / (S^2 - 1)
-  scaled_sigma_B <- sigma_B / sqrt(S^2 - 1)
->>>>>>> 7166e0b55f25ddf24a08e541623a207156030fb4
-  
+
   B <- array(rnorm(S*S*S, mean = scaled_mu_B, sd = scaled_sigma_B), c(S, S, S))
   B <- NoSelfHOIs(B)
   return(B)
