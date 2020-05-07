@@ -9,44 +9,6 @@ library(viridis)
 library(hrbrthemes)
 library(cubature)
 
-# getting predictions
-summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
-                      conf.interval=.95, .drop=TRUE) {
-  library(plyr)
-  
-  # New version of length which can handle NA's: if na.rm==T, don't count them
-  length2 <- function (x, na.rm=FALSE) {
-    if (na.rm) sum(!is.na(x))
-    else       length(x)
-  }
-  
-  # This does the summary. For each group's data frame, return a vector with
-  # N, mean, and sd
-  datac <- ddply(data, groupvars, .drop=.drop,
-                 .fun = function(xx, col) {
-                   c(N    = length2(xx[[col]], na.rm=na.rm),
-                     mean = mean   (xx[[col]], na.rm=na.rm),
-                     sd   = sd     (xx[[col]], na.rm=na.rm)
-                   )
-                 },
-                 measurevar
-  )
-  
-  # Rename the "mean" column    
-  datac <- plyr::rename(datac, c("mean" = measurevar))
-  
-  datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
-  
-  # Confidence interval multiplier for standard error
-  # Calculate t-statistic for confidence interval: 
-  # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
-  ciMult <- qt(conf.interval/2 + .5, datac$N-1)
-  datac$ci <- datac$se * ciMult
-  
-  return(datac)
-}
-
-
 cavity_soln <- function(x, cur_data) {
   
   phi <- x[1]
@@ -132,6 +94,8 @@ filename <- paste0("simdata/", filename)
 out_data <- read.csv(filename, header = TRUE, sep = ",")
 out_data <- rbind(out_data, read.csv("simdata/sim503_OnlyHOIs300.csv", header = TRUE, sep = ","))
 out_data <- rbind(out_data, read.csv("simdata/sim504_OnlyHOIs300.csv", header = TRUE, sep = ","))
+#out_data <- rbind(out_data, read.csv("simdata/sim505_OnlyHOIs300.csv", header = TRUE, sep = ","))
+
 
 out_data %>% filter(Equilibrium == FALSE) %>%
   summarise(NonEqNumRuns = length(Equilibrium))
@@ -148,7 +112,7 @@ plot_coexist <- summarySE(plot_coexist, measurevar = "FracCoexist",
 plot_coexist <- get_preds(plot_coexist)
 
 plCoexist <- ggplot(plot_coexist, aes(x = SigmaB, y = FracCoexist, color = as.factor(S))) + 
-  geom_errorbar(aes(ymin= FracCoexist - se, ymax = FracCoexist + se), width = 0.02) +
+  geom_errorbar(aes(ymin= FracCoexist - se, ymax = FracCoexist + se), width = 0) +
   geom_line(aes(x = SigmaB, y = PredFraction, color = as.factor(S)), size = 1.5, alpha = 0.75) +
   geom_point(size = 2.5) + theme_bw() + labs(color = "S") + #xlim(c(0.15, 0.75)) + ylim(c(0.825, 1)) +
   ggtitle("Coexistence Predictions")

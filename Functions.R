@@ -2,6 +2,7 @@
 
 library(deSolve)
 library(MASS)
+library(plyr)
 library(tidyverse)
 library(reshape2)
 
@@ -59,7 +60,7 @@ BuildB <- function(mu_B = -2, sigma_B = 0.5, rho_B = 0, mu_A = -2, A) {
 }
 
 # creates a list of parameters for integrating the dynamics
-BuildPars <- function(S = 50, mu_r = 1, sigma_r = 0,mu_d = 1, sigma_d = 0,
+BuildPars <- function(S = 50, mu_r = 1, sigma_r = 0, mu_d = 1, sigma_d = 0,
                       mu_A = -2, sigma_A = 0.5, rho_A = 0,
                       mu_B = -2, sigma_B = 0.5, rho_B = 0) {
   
@@ -71,6 +72,18 @@ BuildPars <- function(S = 50, mu_r = 1, sigma_r = 0,mu_d = 1, sigma_d = 0,
   pars <- list(S = S, r = r, d = d, A = A, B = B)
   return(pars)
 }
+
+# creates a list of parameters for integrating the dynamics
+BuildPars <- function(input_params) {
+
+  pars <- with(input_params, list(S = S, r = rnorm(S, mean = MuR, sd = SigmaR),
+                                  d = rnorm(S, mean = MuD, sd = SigmaD),
+                                  A = BuildA(S, MuA, SigmaA, RhoA)))
+  pars$B <- with(input_params, BuildB(MuB, SigmaB, RhoB, MuA, pars$A))
+  
+  return(pars)
+}
+
 
 # computes the growth rates of the current state and parameters
 GetGrowthRates <- function(N, pars) {

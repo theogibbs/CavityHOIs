@@ -4,24 +4,22 @@ source("Functions.R")
 
 ##
 
-# runs the dynamics, gets the endpoints and checks if the system is at equilibrium and is uninvadeable
+# runs the dynamics, gets the endpoints and checks if the system is at an uninvadeable equilibrium
 
-###### HMMM you could check those things later
-
-GetAbds <- function(pars, inimin = 0, inimax = 1, endtime = 1e7,
-                    abd_cutoff = 1e-14, gr_cutoff = 0.01) {
+GetAbds <- function(pars, settings) {
+  
   S <- pars$S
-  inistate <- runif(S, min = inimin, max = inimax)
-  out <- IntegrateDynamics(inistate, pars, endtime, endtime, Dynamics)
+  inistate <- with(settings, runif(S, min = inimin, max = inimax))
+  out <- with(settings, IntegrateDynamics(inistate, pars, endtime, endtime, Dynamics))
   
   end_state <- as.numeric(out[(nrow(out)),-1])
-  survivors <- which(end_state > abd_cutoff)
+  survivors <- which(end_state > settings$abd_cutoff)
   invaders <- setdiff(1:S, survivors)
   end_state[invaders] <- 0
   
   growth_rates <- GetGrowthRates(end_state, pars)
   survivor_grs <- growth_rates[survivors]
-  equilibrium <- as.logical(prod(survivor_grs <= gr_cutoff))
+  equilibrium <- as.logical(prod(survivor_grs <= settings$gr_cutoff))
   
   invader_grs <- growth_rates[invaders]
   pos_invaders <- which(invader_grs > 0)
@@ -31,85 +29,103 @@ GetAbds <- function(pars, inimin = 0, inimax = 1, endtime = 1e7,
   return(ret)
 }
 
-IterateOverParams <- function(input_params) {
+# creates pars and runs the dynamics over the input parameters for a given number of replicates
+IterateOverParams <- function(input_params, settings, num_replicates) {
   
+  iterated_params <- bind_rows(replicate(num_replicates, input_params, simplify = FALSE))
+  iterated_params$CommunityID <- 1:nrow(iterated_params)
+  pars_list <- alply(.data = iterated_params, .margins = 1, .fun = BuildPars)
+  ret_abds <- ldply(.data = pars_list, .fun = GetAbds, settings)
   
-  
-}
-
-iterate_over_params <- function(input_params, num_replicates) {
-  coexistence_stats <- get_coexistence_stats(input_params[1,], num_replicates)
-  for(i in 2:nrow(input_params)) {
-    print(paste("Parameter Combination", i, "of", nrow(input_params)))
-    coexistence_stats <- rbind(coexistence_stats, get_coexistence_stats(input_params[i,], num_replicates))
-  }
-  return(coexistence_stats)
+  return(ret_abds)
 }
 
 
-# hard code in a loop over the number of replicates
-# maybe also have R read in input information from an outside text file???
 
-input_S <- 300
+input_S <- 50
 input_mu_r <- 1
 input_sigma_r <- 0
 input_mu_d <- 1
 input_sigma_d <- 0
 input_mu_A <- -2
-input_sigma_A <- seq(0.5, 1, length.out = 10)
-input_rho <- 0
+input_sigma_A <- seq(0.5, 1, length.out = 2)
+input_rho_A <- 0
 input_mu_B <- 0
 input_sigma_B <- 0#seq(0.5, 1, length.out = 10)
+input_rho_B <- 0
 
-abd_cutoff <- 1e-14
-gr_cutoff <- 0.001
+input_params <- crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d,
+                         SigmaD = input_sigma_d, MuA = input_mu_A, SigmaA = input_sigma_A, RhoA = input_rho_A,
+                         MuB = input_mu_B, SigmaB = input_sigma_B, RhoB = input_rho_B)
 
-endtime <- 1e7
-inimin <- 0
-inimax <- 1
+settings <- list(abd_cutoff = 1e-14, gr_cutoff = 0.001, endtime = 1e7, inimin = 0, inimax = 1)
 
-input_params <- crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d, SigmaD = input_sigma_d,
-                         MuA = input_mu_A, SigmaA = input_sigma_A, Rho = input_rho, MuB = input_mu_B, SigmaB = input_sigma_B,
-                         AbdCutoff = abd_cutoff, GrCutoff = gr_cutoff, EndTime = endtime, IniMin = inimin, IniMax = inimax)
-
-print(system.time(out_data  <- iterate_over_params(input_params, num_replicates = 10)))
-print(head(out_data))
-
-filename <- "sim505_OnlyPairwise300.csv"
-filename <- paste0("simdata/", filename)
-write.csv(out_data, file = filename, row.names = FALSE)
+system.time(out_abds <- IterateOverParams(input_params = input_params, settings = settings, num_replicates = 50))
 
 
-
-get_coexistence_stats <- function(input_params, num_replicates) {
+GetStatistics <- function(abds) {
   
-  equilibria <- c()
-  invasibility <- c()
-  NumCoexist <- c()
-  MeanAbd <- c()
-  VarAbd <- c()
+  error_bars <- abds %>% group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB, CommunityID) %>%
+    summarise(CommPhi = unique(sum(Abundances > 0) / S), CommSecAbd = mean(Abundances^2)) %>%
+    group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB) %>%
+    summarise(Phi = mean(CommPhi), SecAbd = mean(CommSecAbd), ErrorPhi = sd(CommPhi), ErrorSec = sd(CommSecAbd))
   
-  rep_input_params <- input_params
+  abd_stats <- abds %>%
+    group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB) %>%
+    summarise(Mu = unique(MuA + MuB), Sigma = unique(sqrt(SigmaA^2 + SigmaB^2)),
+              MeanAbd = mean(Abundances), FourthAbd = mean(Abundances^4))
   
-  for(i in 1:num_replicates) {
-    pars <- with(input_params, BuildPars(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, Rho, MuB, SigmaB))
-    abds_list <- with(input_params, get_abds(pars, IniMin, IniMax, EndTime, AbdCutoff, GrCutoff))
-    cur_abd <- abds_list$abds
-    equilibria <- c(equilibria, abds_list$equilibrium)
-    invasibility <- c(invasibility, abds_list$uninvadeable)
-    
-    cur_coexist <- sum(abds_list$abds > 0)
-    NumCoexist <- c(NumCoexist, cur_coexist)
-    MeanAbd <- c(MeanAbd, sum(cur_abd) / cur_coexist)
-    cur_abd[cur_abd == 0] <- NA
-    VarAbd <- c(VarAbd, var(cur_abd, na.rm = TRUE))
-    if(i < num_replicates) {
-      rep_input_params <- rbind(rep_input_params, input_params)
-    }
+  ret_stats <- merge(abd_stats, error_bars)
+  
+  ret_stats <- ret_stats %>%
+    mutate(InteractionType = ifelse(SigmaA != 0, ifelse(SigmaB == 0,
+                                                        "Pairwise Interactions",
+                                                        "Mixed Interactions"),
+                                    "Higher Order Interactions")) %>%
+    mutate(PlotType = factor(InteractionType,
+                             levels = c("Pairwise Interactions", "Mixed Interactions", "Higher Order Interactions")))
+  
+  
+  return(ret_stats)
+}
+
+PlotCoexistence <- function(abd_stats) {
+  plCoexist <- ggplot(abd_stats, aes(x = Sigma, y = Phi, color = as.factor(Mu))) +
+    geom_errorbar(aes(ymin = Phi - 2 * ErrorPhi, ymax = Phi + 2 * ErrorPhi), width = 0) +
+    geom_point(size = 2) + theme_bw() + facet_wrap(~ PlotType)
+  
+  return(plCoexist)
+}
+
+PlotCoexistence(GetStatistics(out_abds))
+# hard code in a loop over the number of replicates
+
+
+
+parallel <- FALSE
+
+if(parallel) {
+  arr_length <- 5
+  filename <- "sim505_OnlyPairwise300"
+  arr_ind <- 1:arr_length
+  
+  for(cur_ind in arr_ind) {
+    #cur_input_params <- input_params %>% filter(ArrInd == cur_ind)
+    out_abds <- IterateOverParams(cur_input_params)
+    cur_file <- paste0("simdata/", filename, "_", toString(cur_ind), ".csv")
+    print(cur_file)
+    #write.csv(out_abds, file = cur_file, row.names = FALSE)
   }
   
-  ret <- dplyr::bind_cols(rep_input_params, data.frame(Equilibrium = equilibria, Uninvasible = invasibility,
-                                                       NumCoexist = NumCoexist, MeanAbd = MeanAbd, VarAbd = VarAbd))
   
-  return(ret)
 }
+
+#print(system.time(out_data  <- iterate_over_params(input_params, num_replicates = 10)))
+#print(head(out_data))
+
+#filename <- "sim505_OnlyPairwise300.csv"
+#filename <- paste0("simdata/", filename)
+#write.csv(out_data, file = filename, row.names = FALSE)
+
+
+
