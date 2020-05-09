@@ -311,3 +311,72 @@ plHeatMap <- ggplot(plot_pred, aes(x = Mu, y = Sigma, fill = PredFraction)) +
   facet_wrap(~as.factor(PlotType)) + coord_fixed(ratio = (diff(range(plot_pred$Mu)) / diff(range(plot_pred$Sigma))))
 plHeatMap
 
+
+
+
+###### New plotting code
+
+
+
+GetStatistics <- function(abds) {
+  
+  error_bars <- abds %>% group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB, CommunityID) %>%
+    summarise(CommPhi = unique(sum(Abundances > 0) / S), CommSecAbd = mean(Abundances^2)) %>%
+    group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB) %>%
+    summarise(Phi = mean(CommPhi), SecAbd = mean(CommSecAbd), ErrorPhi = sd(CommPhi), ErrorSec = sd(CommSecAbd))
+  
+  abd_stats <- abds %>%
+    group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB) %>%
+    summarise(Mu = unique(MuA + MuB), Sigma = unique(sqrt(SigmaA^2 + SigmaB^2)),
+              MeanAbd = mean(Abundances), FourthAbd = mean(Abundances^4))
+  
+  ret_stats <- merge(abd_stats, error_bars)
+  
+  ret_stats <- ret_stats %>%
+    mutate(InteractionType = ifelse(SigmaA != 0, ifelse(SigmaB == 0,
+                                                        "Pairwise Interactions",
+                                                        "Mixed Interactions"),
+                                    "Higher Order Interactions")) %>%
+    mutate(PlotType = factor(InteractionType,
+                             levels = c("Pairwise Interactions", "Mixed Interactions", "Higher Order Interactions")))
+  
+  
+  return(ret_stats)
+}
+
+PlotCoexistence <- function(abd_stats) {
+  plCoexist <- ggplot(abd_stats, aes(x = Sigma, y = Phi, color = as.factor(Mu))) +
+    geom_errorbar(aes(ymin = Phi - ErrorPhi, ymax = Phi + ErrorPhi), width = 0) +
+    geom_point(size = 2) + theme_bw() + facet_wrap(~ PlotType)
+  
+  return(plCoexist)
+}
+
+PlotCoexistence(GetStatistics(out_abds))
+plot_abds <- out_abds
+new_params <- input_params
+new_params$Rho <- new_params$RhoA
+preds <- get_preds(new_params)
+plot_abds <- plot_abds %>%
+  filter(Abundances != 0, Abundances < 5) %>%
+  mutate(Prediction = ifelse(SigmaB == 0.5, dnorm(Abundances, preds$PredMean[1], sqrt(preds$PredVar[1] - preds$PredMean[1]^2)),
+                             dnorm(Abundances, preds$PredMean[2], sqrt(preds$PredVar[2] - preds$PredMean[2]^2))))
+plot_abds <- plot_abds %>%
+  mutate(InteractionType = ifelse(SigmaA != 0, ifelse(SigmaB == 0,
+                                                      "Pairwise Interactions",
+                                                      "Mixed Interactions"),
+                                  "Higher Order Interactions")) %>%
+  mutate(PlotType = factor(InteractionType,
+                           levels = c("Pairwise Interactions", "Mixed Interactions", "Higher Order Interactions")))
+#dnorm(Abundances, 0.500, sqrt(0.266))
+ggplot(plot_abds, aes(x = Abundances, y = ..density..)) +
+  geom_histogram(fill = "white", color = "black", binwidth = 0.05) +
+  ggtitle("Species Abundance Distributions") +
+  facet_grid(PlotType ~ SigmaB, labeller = label_bquote(cols = sigma == .(SigmaB))) +
+  theme_bw() + theme(strip.text.x = element_text(size = 15), strip.text.y = element_text(size = 15)) +
+  ylab("Density") +
+  geom_line(aes(x = Abundances, y = Prediction), color = "blue", size = 1)
+# hard code in a loop over the number of replicates
+
+
+
