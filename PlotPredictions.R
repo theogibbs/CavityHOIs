@@ -1,13 +1,10 @@
 #### PACKAGES
 
 library(gridExtra)
-library(ggplot2)
-library(plyr)
-library(tidyverse)
 library(nleqslv)
-library(viridis)
-library(hrbrthemes)
-library(cubature)
+library(VGAM)
+
+source("Functions.R")
 
 cavity_soln <- function(x, cur_data) {
   
@@ -239,55 +236,48 @@ get_preds <- function(out_data) {
   return(ret_out_data)
 }
 
-
-input_S <- 100
+# some scratch space and code to generate the desired combination of parameters
+input_S <- 30
 input_mu_r <- 1
 input_sigma_r <- 0
 input_mu_d <- 1
 input_sigma_d <- 0
-input_mu_A <- seq(-2, -5, length.out = 25)
-input_sigma_A <- seq(0.25, 2, length.out = 25)
-input_rho <- 0
-input_mu_B <- 0#c(-2, -3)
-input_sigma_B <- 0#seq(0.01, 1, length.out = 50)
+input_mu_A <- 0#seq(-2, -4, length.out = 50)
+input_sigma_A <- 0#seq(0.5, 1, length.out = 2)
+input_rho_A <- 0
+input_mu_B <- seq(0, -5, length.out = 50)
+input_sigma_B <- seq(0.5, 1.5, length.out = 50)
+input_rho_B <- 0
 
-abd_cutoff <- 1e-14
-gr_cutoff <- 0.001
+input_params <- crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d,
+                         SigmaD = input_sigma_d, MuA = input_mu_A, SigmaA = input_sigma_A, RhoA = input_rho_A,
+                         MuB = input_mu_B, SigmaB = input_sigma_B, RhoB = input_rho_B)
 
-endtime <- 1e7
-inimin <- 0
-inimax <- 1
+input_mu_A <- input_mu_B
+input_sigma_A <- input_sigma_B
+input_mu_B <- 0
+input_sigma_B <- 0
 
-input_params <- crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d, SigmaD = input_sigma_d,
-                         MuA = input_mu_A, SigmaA = input_sigma_A, Rho = input_rho, MuB = input_mu_B, SigmaB = input_sigma_B,
-                         AbdCutoff = abd_cutoff, GrCutoff = gr_cutoff, EndTime = endtime, IniMin = inimin, IniMax = inimax)
+new_params <- crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d,
+                       SigmaD = input_sigma_d, MuA = input_mu_A, SigmaA = input_sigma_A, RhoA = input_rho_A,
+                       MuB = input_mu_B, SigmaB = input_sigma_B, RhoB = input_rho_B)
 
-temp_params <- input_params
+input_params <- rbind(input_params, new_params)
 
-input_mu_B <- input_mu_A
-input_sigma_B <- input_sigma_A
-input_mu_A <- 0
-input_sigma_A <- 0
+new_params$MuA <- new_params$MuA / 2
+new_params$MuB <- new_params$MuA
+new_params$SigmaA <- new_params$SigmaA / sqrt(2)
+new_params$SigmaB <- new_params$SigmaA
 
-input_params <- rbind(input_params,
-                      crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d, SigmaD = input_sigma_d,
-                         MuA = input_mu_A, SigmaA = input_sigma_A, Rho = input_rho, MuB = input_mu_B, SigmaB = input_sigma_B,
-                         AbdCutoff = abd_cutoff, GrCutoff = gr_cutoff, EndTime = endtime, IniMin = inimin, IniMax = inimax))
+input_params <- rbind(input_params, new_params)
 
-temp_params$MuA <- temp_params$MuA / 2
-temp_params$MuB<- temp_params$MuA
-temp_params$SigmaA <- temp_params$SigmaA / sqrt(2)
-temp_params$SigmaB <- temp_params$SigmaA
-
-input_params <- rbind(input_params, temp_params)
-
-plot_pred <- get_preds(input_params)
+plot_pred <- GetPredictions(input_params)
 
 plFracA <- ggplot(plot_pred %>% filter(SigmaB == 0), aes(x = SigmaA, y = PredFraction, color = MuA)) + 
   geom_point() + theme_bw() + labs(color = "MuA") + #xlim(c(0.15, 0.75)) + ylim(c(0.825, 1)) +
   ggtitle("Pairwise")
 
-plFracB <- ggplot(plot_pred %>% filter(SigmaB != 0), aes(x = Sigma, y = PredFraction, color = Mu)) + 
+plFracB <- ggplot(plot_pred %>% filter(SigmaB != 0), aes(x = SigmaB, y = PredFraction, color = MuB)) + 
   geom_point() + theme_bw() + labs(color = "Mu") + #xlim(c(0.15, 0.75)) + ylim(c(0.825, 1)) +
   ggtitle("HOI")
 grid.arrange(plFracA, plFracB, nrow = 1)
@@ -301,7 +291,8 @@ plot_pred <- plot_pred %>%
   mutate(Mu = MuA + MuB)
 
 plHeatMap <- ggplot(plot_pred, aes(x = Mu, y = Sigma, fill = PredFraction)) +
-  geom_raster(interpolate = TRUE) + labs(fill = "Phi") + scale_fill_viridis(end = 0.9) + scale_x_continuous(expand = c(0, 0)) +
+  geom_raster(interpolate = TRUE) + labs(fill = "Phi") +
+  scale_fill_viridis(end = 0.9) + scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) + theme(strip.background = element_rect(fill="white", color = "black"),
                                                aspect.ratio = 1,
                                                panel.background = element_rect(fill = NA),
@@ -316,67 +307,207 @@ plHeatMap
 
 ###### New plotting code
 
+### only predictions
 
+CavitySoln <- function(x, cur_data) {
+  
+  phi <- x[1]
+  avgN <- x[2]
+  secN <- x[3]
+  fourthN <- x[4]
+  v <- x[5]
+  
+  avg_norm <- with(cur_data, v * (MuR + phi * MuA * avgN +  MuB * phi^2 * avgN^2))
+  var_norm <- with(cur_data, v^2 * (SigmaR^2 + SigmaA^2 * phi * secN + SigmaB^2* phi^2 * secN^2 ))
+  
+  
+  if(var_norm < 0.001) var_norm <- 0.001
+  error_fn <- erf(avg_norm / sqrt(2 * var_norm))
+  
+  eq1 <- 0.5 * (1 + error_fn)
+  eq2 <- avg_norm / 2 * (1 + error_fn) + sqrt(var_norm) * exp(- 0.5 * avg_norm^2 / var_norm) / sqrt(2 * pi)
+  eq3 <- (avg_norm^2 + var_norm) / 2 * (1 + error_fn)
+  eq3 <- eq3 + avg_norm * sqrt(var_norm) * exp(- 0.5 * avg_norm^2 / var_norm) / sqrt(2 * pi)
+  eq4 <- (3 * var_norm^2 + 6 * avg_norm^2 * var_norm + avg_norm^4) / 2 * (1 + error_fn)
+  eq4 <- eq4 + avg_norm * sqrt(var_norm) * (5 * avg_norm * var_norm + avg_norm^3) * exp(- 0.5 * avg_norm^2 / var_norm) / sqrt(2 * pi)
+  
+  eq1 <- phi - eq1
+  eq2 <- avgN - (1 / phi) * eq2
+  eq3 <- secN - (1 / phi) * eq3
+  eq4 <- fourthN - (1 / phi) * eq4
+  eq5 <- with(cur_data, 1 - v * (MuD - 2 * phi * MuB * avgN / (S+1) + phi * RhoA * SigmaA^2 * v))
+  
+  return(c(eq1, eq2, eq3, eq4, eq5))
+}
+
+
+GetPredictions <- function(out_data) {
+  PRED <- data.frame(PredFraction = c(), PredMean = c(), PredSec = c(), PredFourth = c(), PredV = c())
+  
+  for(row in 1:nrow(out_data)) {
+    
+    if(row %% 100 == 0) {
+      print("Row number:")
+      print(row)
+    }
+    cur_data <- out_data[row,]
+    
+    ini_phi <- 1
+    
+    f <- function(ini_mean, cur_data) return(with(cur_data, MuR + (MuA - 1) * ini_mean + MuB * ini_mean^2))
+    testxs <- seq(0, 2, length.out = 1000); fxs <- c(); gxs <- c(); hxs <- c()
+    for(curx in testxs) fxs <- c(fxs, f(curx, cur_data))
+    max_mean <- testxs[fxs < 0][1]
+    ini_mean <- uniroot(f, c(0, max_mean), cur_data)$root
+    
+    g <- function(ini_sec, cur_data) {
+      return(with(cur_data, SigmaR^2 + ini_mean^2 + (SigmaA^2 - 1) * ini_sec + SigmaB^2 * ini_sec^2))}
+    for(curx in testxs) gxs <- c(gxs, g(curx, cur_data))
+    max_sec <- testxs[gxs < 0][1]
+    if(!is.na(max_sec)) {
+      ini_sec <- uniroot(g, c(0, max_sec), cur_data)$root
+    } else {
+      ini_sec <- ini_mean
+    }
+    ini_var <- ini_sec - ini_mean^2
+    
+    ini_fourth <- 3 * ini_var^2 + 6 * ini_mean^2 * ini_var + ini_mean^4
+    
+    h <- function(ini_v, cur_data) with(cur_data, 1 - ini_v * (MuD - 2 * MuB * ini_mean / (S+1) + RhoA * SigmaA^2 * ini_v))
+    for(curx in testxs) hxs <- c(hxs, h(curx, cur_data))
+    max_v <- testxs[hxs < 0][1]
+    ini_v <- uniroot(h, c(0, max_v), cur_data)$root
+    
+    ini_guess <- c(1 - 0.25 * with(cur_data, sqrt(SigmaA^2 + SigmaB^2)), ini_mean, ini_sec, ini_fourth, ini_v)
+    cav_soln <- nleqslv(ini_guess, CavitySoln, method = "Broyden", jac = NULL, cur_data)$x
+
+    PRED <- rbind(PRED, data.frame(PredFraction = cav_soln[1], PredMean = cav_soln[2],
+                                   PredSec = cav_soln[3], PredFourth = cav_soln[4], PredV = cav_soln[5]))
+  }
+  
+  ret_out_data <- dplyr::bind_cols(out_data, PRED)
+  return(ret_out_data)
+}
+
+LabelAbds <- function(abds) {
+  
+  EqRuns <- abds %>%
+    filter(Equilibrium == FALSE) %>%
+    summarise(NonEqNumRuns = length(Equilibrium))
+  
+  if(EqRuns$NonEqNumRuns != 0) print("WARNING: Some runs did not reach equilibrium.")
+  
+  InvRuns <- abds %>%
+    filter(Equilibrium == TRUE, Uninvadeable == FALSE) %>%
+    summarise(InvNumRuns = length(Equilibrium))
+  
+  if(InvRuns$InvNumRuns != 0) print("WARNING: Some equilibria are invasible.")
+  
+  ret_abds <- abds %>%
+    mutate(Interaction= ifelse(SigmaA != 0, ifelse(SigmaB == 0, "Pairwise", "Mixed"), "Higher Order")) %>%
+    mutate(Interaction = factor(Interaction, levels = c("Pairwise", "Mixed", "Higher Order"))) %>%
+    mutate(Sigma = signif(sqrt(SigmaA^2 + SigmaB^2)))
+  
+  return(ret_abds)
+}
 
 GetStatistics <- function(abds) {
-  
-  error_bars <- abds %>% group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB, CommunityID) %>%
-    summarise(CommPhi = unique(sum(Abundances > 0) / S), CommSecAbd = mean(Abundances^2)) %>%
+  ret_stats <- abds %>% group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB, CommunityID) %>%
+    summarise(CommPhi = unique(sum(Abundances > 0) / S), CommMean = mean(Abundances[Abundances > 0]),
+              CommSecAbd = mean(Abundances[Abundances > 0]^2), CommVar = CommSecAbd - CommMean^2,
+              CommFourthAbd = mean(Abundances[Abundances > 0]^4), Interaction = unique(Interaction)) %>%
     group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB) %>%
-    summarise(Phi = mean(CommPhi), SecAbd = mean(CommSecAbd), ErrorPhi = sd(CommPhi), ErrorSec = sd(CommSecAbd))
-  
-  abd_stats <- abds %>%
-    group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB) %>%
-    summarise(Mu = unique(MuA + MuB), Sigma = unique(sqrt(SigmaA^2 + SigmaB^2)),
-              MeanAbd = mean(Abundances), FourthAbd = mean(Abundances^4))
-  
-  ret_stats <- merge(abd_stats, error_bars)
-  
-  ret_stats <- ret_stats %>%
-    mutate(InteractionType = ifelse(SigmaA != 0, ifelse(SigmaB == 0,
-                                                        "Pairwise Interactions",
-                                                        "Mixed Interactions"),
-                                    "Higher Order Interactions")) %>%
-    mutate(PlotType = factor(InteractionType,
-                             levels = c("Pairwise Interactions", "Mixed Interactions", "Higher Order Interactions")))
-  
-  
+    summarise(Phi = mean(CommPhi), MeanAbd = mean(CommMean), SecAbd = mean(CommSecAbd), VarAbd = mean(CommVar),
+              FourthAbd = mean(CommFourthAbd), ErrorPhi = sd(CommPhi), ErrorMean = sd(CommMean), ErrorSec = sd(CommSecAbd),
+              ErrorVar = sd(CommVar), ErrorFourth = sd(CommFourthAbd), Mu = unique(MuA + MuB),
+              Sigma = unique(sqrt(SigmaA^2 + SigmaB^2)), Interaction = unique(Interaction))
   return(ret_stats)
 }
 
-PlotCoexistence <- function(abd_stats) {
-  plCoexist <- ggplot(abd_stats, aes(x = Sigma, y = Phi, color = as.factor(Mu))) +
-    geom_errorbar(aes(ymin = Phi - ErrorPhi, ymax = Phi + ErrorPhi), width = 0) +
-    geom_point(size = 2) + theme_bw() + facet_wrap(~ PlotType)
+PlotCoexistence <- function(pred_stats) {
+  melt_stats <- pred_stats %>%
+    ungroup() %>%
+    select(Mu, Sigma, Phi, MeanAbd, VarAbd, Interaction) %>%
+    melt(id.vars = c("Mu", "Sigma", "Interaction"))
+  melt_stats$Error <- c(pred_stats$ErrorPhi, pred_stats$ErrorMean, pred_stats$ErrorVar)
+  melt_stats$Prediction <- c(pred_stats$PredFraction, pred_stats$PredMean, pred_stats$PredSec - pred_stats$PredMean^2)
   
+  melt_stats$variable <- c(rep("Coexisting Fraction", times = nrow(pred_stats)), rep("SAD Mean", times = nrow(pred_stats)),
+                           rep("SAD Variance", times = nrow(pred_stats)))
+  
+  plCoexist <- ggplot(melt_stats, aes(x = Sigma, y = value, color = Interaction, shape = Interaction)) +
+    geom_errorbar(aes(ymin = value - Error, ymax = value + Error), width = 0, size = 1) +
+    geom_point(size = 4) + theme_bw() + theme(axis.title.y=element_blank(),
+                                              strip.text.x = element_text(size = 15),
+                                              strip.text.y = element_text(size = 15),
+                                              text = element_text(size=20)) +
+    geom_line(aes(x = Sigma, y = Prediction, color = Interaction), size = 2, alpha = 0.75) +
+    facet_wrap(~ variable, scales = "free")
+    
   return(plCoexist)
 }
 
-PlotCoexistence(GetStatistics(out_abds))
-plot_abds <- out_abds
-new_params <- input_params
-new_params$Rho <- new_params$RhoA
-preds <- get_preds(new_params)
-plot_abds <- plot_abds %>%
-  filter(Abundances != 0, Abundances < 5) %>%
-  mutate(Prediction = ifelse(SigmaB == 0.5, dnorm(Abundances, preds$PredMean[1], sqrt(preds$PredVar[1] - preds$PredMean[1]^2)),
-                             dnorm(Abundances, preds$PredMean[2], sqrt(preds$PredVar[2] - preds$PredMean[2]^2))))
-plot_abds <- plot_abds %>%
-  mutate(InteractionType = ifelse(SigmaA != 0, ifelse(SigmaB == 0,
-                                                      "Pairwise Interactions",
-                                                      "Mixed Interactions"),
-                                  "Higher Order Interactions")) %>%
-  mutate(PlotType = factor(InteractionType,
-                           levels = c("Pairwise Interactions", "Mixed Interactions", "Higher Order Interactions")))
-#dnorm(Abundances, 0.500, sqrt(0.266))
-ggplot(plot_abds, aes(x = Abundances, y = ..density..)) +
-  geom_histogram(fill = "white", color = "black", binwidth = 0.05) +
-  ggtitle("Species Abundance Distributions") +
-  facet_grid(PlotType ~ SigmaB, labeller = label_bquote(cols = sigma == .(SigmaB))) +
-  theme_bw() + theme(strip.text.x = element_text(size = 15), strip.text.y = element_text(size = 15)) +
-  ylab("Density") +
-  geom_line(aes(x = Abundances, y = Prediction), color = "blue", size = 1)
-# hard code in a loop over the number of replicates
+PlotHist <- function(proc_abds, hist_sigmas) {
+  plot_abds <- proc_abds %>%
+    filter(Sigma == hist_sigmas[1] | Sigma == hist_sigmas[2]) %>%
+    filter(Abundances > 0)
+  
+  pred_data <- plot_abds %>%
+    select(-one_of("Abundances", "SpeciesID", "CommunityID", "Index")) %>%
+    unique()
+  
+  pred_abds <- GetPredictions(pred_data)
+  plot_abds <- merge(plot_abds, pred_abds)
+  plot_abds <- plot_abds %>%
+    mutate(PredDensity = dnorm(Abundances, mean = PredMean, sd = sqrt(PredSec - PredMean^2)))
+  
+  plHist <- ggplot(plot_abds, aes(x = Abundances, y = ..density..)) +
+    geom_histogram(fill = "white", color = "black", bins = 40) +
+    ggtitle("Species Abundance Distributions") +
+    facet_grid(Sigma ~ Interaction, labeller = label_bquote(rows = sigma == .(Sigma))) +
+    theme_bw() + theme(strip.text.x = element_text(size = 15),
+                       strip.text.y = element_text(size = 15),
+                       text = element_text(size=20)) + ylab("Density") +
+    geom_line(aes(x = Abundances, y = PredDensity), color = "blue", size = 1)
+  return(plHist)
+}
+
+fileregex <- "sim508_OnlyPairwise300."
+out_abds_pw <- paste0("simdata/", list.files(path = "./simdata/", pattern = fileregex)) %>%
+  map_df(~read.csv(., header = TRUE))
+fileregex <- "sim510_OnlyHOIs300."
+out_abds_hois <- paste0("simdata/", list.files(path = "./simdata/", pattern = fileregex)) %>%
+  map_df(~read.csv(., header = TRUE))
+out_abds <- rbind(out_abds_pw, out_abds_hois)
+
+
+proc_abds <- LabelAbds(out_abds)
+abd_stats <- GetStatistics(proc_abds)
+pred_stats <- GetPredictions(abd_stats)
+
+
+plCoexist <- PlotCoexistence(pred_stats)
+show(plCoexist)
+tiff("../CavityHOIs-Notes/Coexistence.tiff", width = 3000, height = 1000, res = 200)
+plCoexist
+dev.off()
+
+plHist <- PlotHist(proc_abds, c(0.5, 1))
+show(plHist)
+tiff("../CavityHOIs-Notes/Histogram.tiff", width = 3000, height = 1000, res = 200)
+plHist
+dev.off()
+
+## conceptual understanding
+
+conc_data <- crossing(MuR = 1, Mu = -4, Mean = seq(-0.1, 0.5, length.out = 100), Label = c("Identity", "Pairwise", "HOI"))
+
+conc_data <- conc_data %>% mutate(Solution = ifelse(Label == "Identity", Mean,
+                                                    ifelse(Label == "Pairwise", MuR + Mu * Mean, MuR + Mu * Mean^2)))
+
+ggplot(conc_data, aes(x = Mean, y = Solution, color = Label)) +
+  geom_line(size = 1.5, alpha = 0.75) + theme_bw() + ylim(c(0, 1)) + ylab("Mean") +
+  theme(legend.title = element_blank()) + ggtitle("Mean Abundance Solution")
 
 
 

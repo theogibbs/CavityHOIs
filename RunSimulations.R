@@ -44,7 +44,7 @@ IterateOverParams <- function(iterated_params, settings) {
 ## Parameter Choices
 
 # some scratch space and code to generate the desired combination of parameters
-input_S <- 15
+input_S <- 30
 input_mu_r <- 1
 input_sigma_r <- 0
 input_mu_d <- 1
@@ -53,32 +53,65 @@ input_mu_A <- 0
 input_sigma_A <- 0#seq(0.5, 1, length.out = 2)
 input_rho_A <- 0
 input_mu_B <- -2
-input_sigma_B <- seq(0.5, 0.75, length.out = 2)
+input_sigma_B <- seq(0.25, 0.75, length.out = 15)
 input_rho_B <- 0
 
 input_params <- crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d,
                          SigmaD = input_sigma_d, MuA = input_mu_A, SigmaA = input_sigma_A, RhoA = input_rho_A,
                          MuB = input_mu_B, SigmaB = input_sigma_B, RhoB = input_rho_B)
 
+input_mu_A <- input_mu_B
+input_sigma_A <- input_sigma_B
+input_mu_B <- 0
+input_sigma_B <- 0
+
+new_params <- crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d,
+                       SigmaD = input_sigma_d, MuA = input_mu_A, SigmaA = input_sigma_A, RhoA = input_rho_A,
+                       MuB = input_mu_B, SigmaB = input_sigma_B, RhoB = input_rho_B)
+
+input_params <- rbind(input_params, new_params)
+  
+new_params$MuA <- input_mu_A / 2
+new_params$MuB <- new_params$MuA
+new_params$SigmaA <- new_params$SigmaA / sqrt(2)
+new_params$SigmaB <- new_params$SigmaA
+
+input_params <- rbind(input_params, new_params)
+
 # choosing some of the basic assumptions of the dynamics
 settings <- list(abd_cutoff = 1e-14, gr_cutoff = 0.01, endtime = 1e7, inimin = 0, inimax = 1)
 
 # choosing the number of replicates for each parameter combination
-num_replicates <- 10
+num_replicates <- 100
 iterated_params <- bind_rows(replicate(num_replicates, input_params, simplify = FALSE))
 
-# setting the number of parallel runs and choosing the current run
-arr_length <- 5 # has to agree with the job.slurm file array IDs
-cur_ind <- commandArgs(trailingOnly = TRUE)
-cur_params <- iterated_params %>%
-  mutate(Index = rep(1:arr_length, length.out = nrow(iterated_params))) %>%
-  filter(Index == cur_ind)
-
-# running the simulations
-system.time(out_abds  <- IterateOverParams(iterated_params = cur_params, settings = settings))
-
-# writing out the data
-filename <- "sim505_OnlyPairwise300"
-cur_file <- paste0("simdata/", filename, "_", toString(cur_ind), ".csv")
-write.csv(out_abds, file = cur_file, row.names = FALSE)
+parallel <- FALSE
+if(parallel) {
+  
+  # setting the number of parallel runs and choosing the current run
+  arr_length <- 5 # has to agree with the job.slurm file array IDs
+  cur_ind <- commandArgs(trailingOnly = TRUE)
+  cur_params <- iterated_params %>%
+    mutate(Index = rep(1:arr_length, length.out = nrow(iterated_params))) %>%
+    filter(Index == cur_ind)
+  
+  # running the simulations
+  system.time(out_abds  <- IterateOverParams(iterated_params = cur_params, settings = settings))
+  
+  # writing out the data
+  filename <- "sim505_OnlyPairwise300"
+  cur_file <- paste0("simdata/", filename, "_", toString(cur_ind), ".csv")
+  write.csv(out_abds, file = cur_file, row.names = FALSE)
+  
+} else {
+  
+  # running the simulations
+  print(system.time(out_abds  <- IterateOverParams(iterated_params = iterated_params, settings = settings)))
+  
+  # writing out the data
+  filename <- "sim509_All30"
+  cur_file <- paste0("simdata/", filename, ".csv")
+  write.csv(out_abds, file = cur_file, row.names = FALSE)
+  
+}
 
