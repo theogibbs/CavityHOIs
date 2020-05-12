@@ -55,22 +55,12 @@ BuildB <- function(mu_B = -2, sigma_B = 0.5, rho_B = 0, mu_A = -2, A) {
   scaled_sigma_B <- sigma_B / S
 
   B <- array(rnorm(S*S*S, mean = scaled_mu_B, sd = scaled_sigma_B), c(S, S, S))
+  centered_A <- A - matrix(mu_A / S, nrow = S, ncol = S)
+  diag(centered_A) <- 0
+  B <- B + rho_B * array(centered_A, c(S, S, S)) / S
+  
   B <- NoSelfHOIs(B)
   return(B)
-}
-
-# creates a list of parameters for integrating the dynamics
-BuildPars <- function(S = 50, mu_r = 1, sigma_r = 0, mu_d = 1, sigma_d = 0,
-                      mu_A = -2, sigma_A = 0.5, rho_A = 0,
-                      mu_B = -2, sigma_B = 0.5, rho_B = 0) {
-  
-  r <- rnorm(S, mean = mu_r, sd = sigma_r)
-  d <- rnorm(S, mean = mu_d, sigma_d)
-  A <- BuildA(S, mu_A, sigma_A, rho_A)
-  B <- BuildB(mu_B, sigma_B, rho_B, mu_A, A)
-  
-  pars <- list(S = S, r = r, d = d, A = A, B = B)
-  return(pars)
 }
 
 # creates a list of parameters for integrating the dynamics
@@ -120,7 +110,6 @@ PlotSeries <- function(series, title = "HOI Dynamics") {
               size = 1.5, alpha = 0.75) +
     ggtitle(title) +
     xlab("Time") + ylab("Abundance") +
-    scale_y_log10() +
     theme_bw() + theme(legend.position = "none")
   return(pl)
 }
