@@ -65,12 +65,13 @@ BuildB <- function(mu_B = -2, sigma_B = 0.5, rho_B = 0, mu_A = -2, A) {
 
 # creates a list of parameters for integrating the dynamics
 BuildPars <- function(input_params) {
-
+  
+  set.seed(input_params$ParsID)
   pars <- with(input_params, list(S = S, r = rnorm(S, mean = MuR, sd = SigmaR),
                                   d = rnorm(S, mean = MuD, sd = SigmaD),
                                   A = BuildA(S, MuA, SigmaA, RhoA)))
   pars$B <- with(input_params, BuildB(MuB, SigmaB, RhoB, MuA, pars$A))
-  
+
   return(pars)
 }
 

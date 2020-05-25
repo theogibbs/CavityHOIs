@@ -4,6 +4,7 @@ library(gridExtra)
 library(nleqslv)
 library(VGAM)
 library(viridis)
+library(truncnorm)
 
 source("Functions.R")
 
@@ -35,7 +36,7 @@ CavitySoln <- function(x, cur_data) {
   eq2 <- avgN - (1 / phi) * eq2
   eq3 <- secN - (1 / phi) * eq3
   eq4 <- fourthN - (1 / phi) * eq4
-  eq5 <- with(cur_data, 1 - v * (MuD - 2 * phi * MuB * avgN / S + phi * RhoA * SigmaA^2 * v))
+  eq5 <- with(cur_data, 1 - v * (MuD - 0 * phi * MuB * avgN / S + phi * RhoA * SigmaA^2 * v))
   
   return(c(eq1, eq2, eq3, eq4, eq5))
 }
@@ -124,7 +125,7 @@ LabelAbds <- function(abds) {
 
 GetStatistics <- function(abds) {
   ret_stats <- abds %>% group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB, CommunityID) %>%
-    summarise(CommPhi = unique(sum(Abundances > 0) / S), CommMean = mean(Abundances[Abundances > 0]),
+    summarise(CommPhi = unique(sum(Abundances > 0) / length(Abundances)), CommMean = mean(Abundances[Abundances > 0]),
               CommSecAbd = mean(Abundances[Abundances > 0]^2), CommVar = CommSecAbd - CommMean^2,
               CommFourthAbd = mean(Abundances[Abundances > 0]^4), Interaction = unique(Interaction)) %>%
     group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB) %>%
@@ -143,20 +144,32 @@ PlotCoexistence <- function(pred_stats) {
   melt_stats$Error <- c(pred_stats$ErrorPhi, pred_stats$ErrorMean, pred_stats$ErrorVar)
   melt_stats$Prediction <- c(pred_stats$PredFraction, pred_stats$PredMean, pred_stats$PredSec - pred_stats$PredMean^2)
   
-  melt_stats$variable <- c(rep("Coexisting Fraction", times = nrow(pred_stats)), rep("SAD Mean", times = nrow(pred_stats)),
-                           rep("SAD Variance", times = nrow(pred_stats)))
+  melt_stats$variable <- c(rep("(a) Coexisting Fraction", times = nrow(pred_stats)), rep("(b) SAD Mean", times = nrow(pred_stats)),
+                           rep("(c) SAD Variance", times = nrow(pred_stats)))
   
   plCoexist <- ggplot(melt_stats, aes(x = Sigma, y = value, color = Interaction, shape = Interaction)) +
-    geom_errorbar(aes(ymin = value - Error, ymax = value + Error), width = 0, size = 1) +
+    geom_errorbar(aes(ymin = value - 2 * Error, ymax = value + 2 * Error), width = 0, size = 1) +
     geom_point(size = 4) + theme_bw() + theme(axis.title.y=element_blank(),
+                                              legend.title = element_blank(),
                                               text = element_text(size=15),
                                               strip.text.x = element_text(size = 15),
                                               strip.text.y = element_text(size = 15),
                                               legend.text=element_text(size=10)) +
     geom_line(aes(x = Sigma, y = Prediction, color = Interaction), size = 2, alpha = 0.75) +
-    facet_wrap(~ variable, scales = "free")
+    facet_wrap(~ variable, scales = "free") + labs(x = expression("Interaction Heterogeneity"~(sigma)))
     
   return(plCoexist)
+}
+
+ParentNorm <- function(x, pred_mean, pred_sec) {
+  mu <- x[1]
+  sigma <- x[2]
+  pred_var <- pred_sec - pred_mean^2
+  
+  mu_eq <- pred_mean - etruncnorm(a = 0, b = Inf, mean = mu, sd = sigma)
+  var_eq <- pred_var - vtruncnorm(a = 0, b = Inf, mean = mu, sd = sigma)
+  
+  return(c(mu_eq, var_eq))
 }
 
 PlotHist <- function(proc_abds, hist_sigmas) {
@@ -169,12 +182,23 @@ PlotHist <- function(proc_abds, hist_sigmas) {
     unique()
   
   pred_abds <- GetPredictions(pred_data)
+  pred_abds$AdjPredMean <- 0
+  pred_abds$PredSD <- 0
+
+  for(i in 1:nrow(pred_abds)) {
+    pred_mean <- pred_abds$PredMean[i]
+    pred_sec <- pred_abds$PredSec[i]
+    new_preds <- nleqslv(c(pred_mean, sqrt(pred_sec - pred_mean^2)), fn = ParentNorm, jac = NULL, pred_mean, pred_sec)$x
+    pred_abds$AdjPredMean[i] <- new_preds[1]
+    pred_abds$PredSD[i] <- new_preds[2]
+  }
+  
   plot_abds <- merge(plot_abds, pred_abds)
   plot_abds <- plot_abds %>%
-    mutate(PredDensity = dnorm(Abundances, mean = PredMean, sd = sqrt(PredSec - PredMean^2)))
+    mutate(PredDensity = dtruncnorm(Abundances, a = 0, b = Inf, mean = AdjPredMean, sd = PredSD))
   
   plHist <- ggplot(plot_abds, aes(x = Abundances, y = ..density..)) +
-    geom_histogram(fill = "white", color = "black", bins = 40) +
+    geom_histogram(fill = "white", color = "black", binwidth = 0.02) +
     ggtitle("Species Abundance Distributions") +
     facet_grid(Sigma ~ Interaction, labeller = label_bquote(rows = sigma == .(Sigma))) +
     theme_bw() + theme(strip.text.x = element_text(size = 15),
@@ -183,6 +207,12 @@ PlotHist <- function(proc_abds, hist_sigmas) {
     geom_line(aes(x = Abundances, y = PredDensity), color = "blue", size = 1)
   return(plHist)
 }
+
+
+fileregex <- "sim511_CorrHOIs."
+corr_abds <- paste0("simdata/", list.files(path = "./simdata/", pattern = fileregex)) %>%
+  map_df(~read.csv(., header = TRUE))
+
 
 fileregex <- "sim508_OnlyPairwise300."
 out_abds_pw <- paste0("simdata/", list.files(path = "./simdata/", pattern = fileregex)) %>%
@@ -199,22 +229,28 @@ out_abds_mx <- paste0("simdata/", list.files(path = "./simdata/", pattern = file
 out_abds <- rbind(out_abds_pw, out_abds_hois, out_abds_mx)
 
 
+fileregex <- "sim51._AllInts300."
+out_abds_all <- paste0("simdata/", list.files(path = "./simdata/", pattern = fileregex)) %>%
+  map_df(~read.csv(., header = TRUE))
+
+out_abds <- rbind(out_abds, out_abds_all)
 
 CheckAbds(out_abds)
-proc_abds <- LabelAbds(out_abds)
+proc_abds <- LabelAbds(out_abds_all)
 abd_stats <- GetStatistics(proc_abds)
 pred_stats <- GetPredictions(abd_stats)
 
 
-plCoexist <- PlotCoexistence(pred_stats)
-show(plCoexist)
-tiff("../CavityHOIs-Notes/Coexistence.tiff", width = 3000, height = 1000, res = 300)
+
+plCoexist <- PlotCoexistence(pred_stats %>% filter(Mu == -4))
+#show(plCoexist)
+png("../CavityHOIs-Notes/Coexistence.png", width = 3000, height = 1000, res = 300)
 plCoexist
 dev.off()
 
 plHist <- PlotHist(proc_abds, c(0.5, 1))
 show(plHist)
-tiff("../CavityHOIs-Notes/Histogram.tiff", width = 3000, height = 1500, res = 300)
+png("../CavityHOIs-Notes/Histogram.png", width = 3000, height = 1500, res = 300)
 plHist
 dev.off()
 
@@ -289,7 +325,7 @@ norm_data <- data.frame(Abundance = seq(-2, 4, length.out = 1000)) %>%
   mutate(Density = dnorm(Abundance, mean = 1, sd = 1))
 
 plDist <- ggplot(norm_data, aes(x = Abundance, y = Density)) +
-  geom_line(color = "blue", size = 2) + theme_classic() +
+  geom_line(color = "darkgreen", size = 2) + theme_classic() +
   theme(legend.title = element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.x = element_blank(),
@@ -297,7 +333,7 @@ plDist <- ggplot(norm_data, aes(x = Abundance, y = Density)) +
         axis.text.y = element_blank(),
         strip.text.y = element_text(size = 15),
         text = element_text(size=20)) + ylim(c(0, 0.5)) + xlim(c(0, 4)) +
-  xlab("Invader Abundance") #+ geom_vline(xintercept = 0, alpha = 0.75, size = 2)
+  xlab("Community Abundance") #+ geom_vline(xintercept = 0, alpha = 0.75, size = 2)
 plDist
 
 tiff("../CavityHOIs-Notes/Distribution.tiff", width = 1000, height = 1000, res = 300)
@@ -411,16 +447,124 @@ input_params <- rbind(input_params, new_params)
 #plot_pred <- GetPredictions(LabelAbds(input_params))
 
 plHeatMap <- ggplot(plot_pred, aes(x = Mu, y = Sigma, fill = PredFraction)) +
-  geom_raster(interpolate = TRUE) + labs(fill = "Phi") +
-  scale_fill_viridis(end = 0.9, na.value="purple") + scale_x_continuous(expand = c(0, 0)) +
+  geom_tile() + labs(fill = "Phi") +
+  scale_fill_viridis(end = 0.9, na.value="darkred") + scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) + theme(strip.background = element_rect(fill="white", color = "black"),
                                                aspect.ratio = 1,
                                                panel.background = element_rect(fill = NA),
                                                text = element_text(size=15),
                                                legend.key.size = unit(1, "cm"),
                                                legend.key.width = unit(0.5,"cm")) +
-  facet_wrap(~as.factor(Interaction)) + coord_fixed(ratio = (diff(range(plot_pred$Mu)) / diff(range(plot_pred$Sigma))))
+  facet_wrap(~as.factor(Interaction)) + coord_fixed(ratio = (diff(range(plot_pred$Mu)) / diff(range(plot_pred$Sigma)))) +
+  labs(x = expression("Mean Interaction Strength"~(mu)), y = expression("Interaction Heterogeneity"~(sigma)),
+       fill = expression("Coexisting\nFraction"*(phi)))
 show(plHeatMap)
-tiff("../CavityHOIs-Notes/HeatMap.tiff", width = 3000, height = 1000, res = 300)
+png("../CavityHOIs-Notes/HeatMap.tiff", width = 3000, height = 1000, res = 300)
 plHeatMap
 dev.off()
+
+## correlated communities
+
+PlotCorr <- function(pred_stats) {
+  melt_stats <- pred_stats %>%
+    ungroup() %>%
+    select(Mu, Sigma, Phi, MeanAbd, VarAbd, RhoB, Interaction) %>%
+    melt(id.vars = c("Mu", "Sigma", "Interaction", "RhoB"))
+  melt_stats$Error <- c(pred_stats$ErrorPhi, pred_stats$ErrorMean, pred_stats$ErrorVar)
+  melt_stats$Prediction <- c(pred_stats$PredFraction, pred_stats$PredMean, pred_stats$PredSec - pred_stats$PredMean^2)
+  
+  melt_stats$variable <- c(rep("Coexisting Fraction", times = nrow(pred_stats)), rep("SAD Mean", times = nrow(pred_stats)),
+                           rep("SAD Variance", times = nrow(pred_stats)))
+  
+  plCoexist <- ggplot(melt_stats, aes(x = Sigma, y = value, color = as.factor(RhoB), shape = as.factor(RhoB))) +
+    geom_errorbar(aes(ymin = value - Error, ymax = value + Error), width = 0, size = 1) +
+    geom_point(size = 4) + theme_bw() + theme(axis.title.y=element_blank(),
+                                              text = element_text(size=15),
+                                              strip.text.x = element_text(size = 15),
+                                              strip.text.y = element_text(size = 15),
+                                              legend.text=element_text(size=10)) + labs(color = "RhoB", shape = "RhoB") + 
+    geom_line(aes(x = Sigma, y = Prediction, color = as.factor(RhoB)), size = 2, alpha = 0.75) +
+    facet_wrap(~ variable, scales = "free")
+  
+  return(plCoexist)
+}
+
+
+CavitySoln <- function(x, cur_data) {
+  
+  phi <- x[1]
+  avgN <- x[2]
+  secN <- x[3]
+  fourthN <- x[4]
+  v <- x[5]
+  
+  avg_norm <- with(cur_data, v * (MuR + phi * MuA * avgN +  MuB * phi^2 * avgN^2))
+  var_norm <- with(cur_data, v^2 * (SigmaR^2 + SigmaA^2 * phi * secN + SigmaB^2* phi^2 * secN^2))
+  
+  
+  if(var_norm < 0.001) var_norm <- 0.001
+  error_fn <- erf(avg_norm / sqrt(2 * var_norm))
+  
+  eq1 <- 0.5 * (1 + error_fn)
+  eq2 <- avg_norm / 2 * (1 + error_fn) + sqrt(var_norm) * exp(- 0.5 * avg_norm^2 / var_norm) / sqrt(2 * pi)
+  eq3 <- (avg_norm^2 + var_norm) / 2 * (1 + error_fn)
+  eq3 <- eq3 + avg_norm * sqrt(var_norm) * exp(- 0.5 * avg_norm^2 / var_norm) / sqrt(2 * pi)
+  eq4 <- (3 * var_norm^2 + 6 * avg_norm^2 * var_norm + avg_norm^4) / 2 * (1 + error_fn)
+  eq4 <- eq4 + avg_norm * sqrt(var_norm) * (5 * avg_norm * var_norm + avg_norm^3) * exp(- 0.5 * avg_norm^2 / var_norm) / sqrt(2 * pi)
+  
+  eq1 <- phi - eq1
+  eq2 <- avgN - (1 / phi) * eq2
+  eq3 <- secN - (1 / phi) * eq3
+  eq4 <- fourthN - (1 / phi) * eq4
+  eq5 <- with(cur_data, 1 - v * (MuD - 2 * phi * MuB * avgN / S + phi * RhoA * SigmaA^2 * v))
+  
+  return(c(eq1, eq2, eq3, eq4, eq5))
+}
+
+GetStatistics <- function(abds) {
+  ret_stats <- abds %>% group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB, CommunityID) %>%
+    summarise(CommPhi = unique(sum(Abundances > 0) / S), CommMean = mean(Abundances[Abundances > 0]),
+              CommSecAbd = mean(Abundances[Abundances > 0]^2), CommVar = CommSecAbd - CommMean^2,
+              CommFourthAbd = mean(Abundances[Abundances > 0]^4), Interaction = unique(Interaction)) %>%
+    group_by(S, MuR, SigmaR, MuD, SigmaD, MuA, SigmaA, RhoA, MuB, SigmaB, RhoB) %>%
+    summarise(Phi = mean(CommPhi), MeanAbd = mean(CommMean), SecAbd = mean(CommSecAbd), VarAbd = mean(CommVar),
+              FourthAbd = mean(CommFourthAbd), ErrorPhi = sd(CommPhi), ErrorMean = sd(CommMean), ErrorSec = sd(CommSecAbd),
+              ErrorVar = sd(CommVar), ErrorFourth = sd(CommFourthAbd), Mu = unique(MuA + MuB),
+              Sigma = unique(sqrt(SigmaA^2 + SigmaB^2)), Interaction = unique(Interaction))
+  return(ret_stats)
+}
+
+
+
+fileregex <- "sim51._CorrHOIs."
+out_abds_corr <- paste0("simdata/", list.files(path = "./simdata/", pattern = fileregex)) %>%
+  map_df(~read.csv(., header = TRUE))
+
+fileregex <- "sim511_Mixed300."
+out_abds_mx <- paste0("simdata/", list.files(path = "./simdata/", pattern = fileregex)) %>%
+  map_df(~read.csv(., header = TRUE))
+
+corr_abds <- rbind(out_abds_corr, out_abds_mx)
+
+CheckAbds(corr_abds)
+corr_abds <- corr_abds %>% filter(Equilibrium == TRUE)
+
+proc_abds_corr <- LabelAbds(corr_abds)
+
+abd_stats <- GetStatistics(proc_abds_corr)
+pred_stats <- GetPredictions(abd_stats)
+
+pred_stats <- pred_stats %>% mutate(Phi = ifelse(RhoB == 0, Phi, Phi / 2)) %>% mutate(Phi = ifelse(Phi < 0.5, 2 * Phi, Phi))
+
+
+plCorr <- PlotCorr(pred_stats)
+show(plCorr)
+tiff("../CavityHOIs-Notes/Correlation.tiff", width = 3000, height = 1000, res = 300)
+plCorr
+dev.off()
+
+
+## Multiple Attractor Analysis
+
+
+
