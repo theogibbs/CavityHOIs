@@ -2,7 +2,7 @@
 
 library(deSolve)
 library(MASS)
-library(plyr)
+#library(plyr)
 library(tidyverse)
 library(reshape2)
 
@@ -108,7 +108,7 @@ PlotSeries <- function(series, title = "HOI Dynamics") {
   meltseries <- melt(series, id.vars = "time")
   pl <- ggplot() +
     geom_line(data = meltseries, aes(x = time, y = value, color = variable),
-              size = 1.5, alpha = 0.75) +
+              size = 3, alpha = 0.75) +
     ggtitle(title) +
     xlab("Time") + ylab("Abundance") +
     theme_bw() + theme(legend.position = "none")

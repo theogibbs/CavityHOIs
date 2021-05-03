@@ -108,7 +108,7 @@ if(parallel) {
     filter(Index == cur_ind)
   
   # running the simulations
-  system.time(out_abds  <- IterateOverParams(iterated_params = cur_params, settings = settings))
+  print(system.time(out_abds  <- IterateOverParams(iterated_params = cur_params, settings = settings)))
   
   # writing out the data
   cur_file <- paste0("simdata/", filename, "_", toString(cur_ind), ".csv")
