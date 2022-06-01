@@ -1,0 +1,82 @@
+## Requirements
+
+source("Functions.R")
+
+## Parameter Choices
+
+# some scratch space and code to generate the desired combination of parameters
+input_S <- 50
+input_mu_r <- 1
+input_sigma_r <- 0
+input_mu_d <- 1
+input_sigma_d <- 0
+input_mu_A <- 0
+input_sigma_A <- 0
+input_rho_A <- 1
+input_mu_B <- -4
+input_sigma_B <- seq(0.5, 1.5, length.out = 5)
+input_rho_B <- 0
+input_h <- 0
+
+input_params <- crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d,
+                         SigmaD = input_sigma_d, MuA = input_mu_A, SigmaA = input_sigma_A, RhoA = input_rho_A,
+                         MuB = input_mu_B, SigmaB = input_sigma_B, RhoB = input_rho_B, h = input_h)
+
+input_mu_A <- input_mu_B
+input_sigma_A <- input_sigma_B
+input_mu_B <- 0
+input_sigma_B <- 0
+
+input_params <- rbind(input_params, crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d,
+                                             SigmaD = input_sigma_d, MuA = input_mu_A, SigmaA = input_sigma_A, RhoA = input_rho_A,
+                                             MuB = input_mu_B, SigmaB = input_sigma_B, RhoB = input_rho_B, h = input_h))
+
+# summary of interaction parameters
+print(dim(input_params))
+print(head(input_params, 10))
+
+# choosing some of the basic assumptions of the dynamics
+settings <- list(abd_cutoff = 1e-14, gr_cutoff = 0.01, endtime = 1e7, inimin = 0, inimax = 1)
+
+# choosing the number of replicates to run for a given set of interaction statistics
+num_replicates <- 10
+iterated_params <- bind_rows(replicate(num_replicates, input_params, simplify = FALSE))
+iterated_params$ParsID <- 1:nrow(iterated_params)
+
+# choosing the number of trials to run for a fixed set of interaction parameters but different initial conditions
+num_trials <- 5
+iterated_params <- bind_rows(replicate(num_trials, iterated_params, simplify = FALSE))
+iterated_params$CommunityID <- 1:nrow(iterated_params)
+
+
+filename <- "sim1215_MultAtt"
+print(paste0("We are running the simulation: ", filename))
+
+parallel <- FALSE
+if(parallel) {
+  
+  # setting the number of parallel runs and choosing the current run
+  arr_length <- 8 # has to agree with the job.slurm file array IDs
+  cur_ind <- commandArgs(trailingOnly = TRUE)
+  cur_params <- iterated_params %>%
+    mutate(Index = rep(1:arr_length, length.out = nrow(iterated_params))) %>%
+    filter(Index == cur_ind)
+  
+  # running the simulations
+  print(system.time(out_abds  <- IterateOverParams(iterated_params = cur_params, settings = settings)))
+  
+  # writing out the data
+  cur_file <- paste0("simdata/", filename, "_", toString(cur_ind), ".csv")
+  write.csv(out_abds, file = cur_file, row.names = FALSE)
+  
+} else {
+  
+  # running the simulations
+  print(system.time(out_abds  <- IterateOverParams(iterated_params = iterated_params, settings = settings)))
+  
+  # writing out the data
+  cur_file <- paste0("simdata/", filename, ".csv")
+  write.csv(out_abds, file = cur_file, row.names = FALSE)
+  
+}
+

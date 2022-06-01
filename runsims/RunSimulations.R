@@ -43,16 +43,16 @@ IterateOverParams <- function(iterated_params, settings) {
 ## Parameter Choices
 
 # some scratch space and code to generate the desired combination of parameters
-input_S <- 300
-input_mu_r <- 1
-input_sigma_r <- 0
+input_S <- 30
+input_mu_r <- 1.5
+input_sigma_r <- c(0, 0.25, 0.5)
 input_mu_d <- 1
 input_sigma_d <- 0
-input_mu_A <- 0
-input_sigma_A <- 0#seq(0.5, 1, length.out = 2)
+input_mu_A <- c(0, -1, -2)
+input_sigma_A <- seq(0.01, 1, length.out = 10)
 input_rho_A <- 0
-input_mu_B <- -2
-input_sigma_B <- seq(0.1, 1, length.out = 3)
+input_mu_B <- 0
+input_sigma_B <- 0
 input_rho_B <- 0
 
 input_params <- crossing(S = input_S, MuR = input_mu_r, SigmaR = input_sigma_r, MuD = input_mu_d,

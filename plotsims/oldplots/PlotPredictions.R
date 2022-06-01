@@ -330,7 +330,7 @@ out_abds <- rbind(out_abds_og, out_abds_pair)
 CheckAbds(out_abds)
 out_abds <- out_abds %>% filter(Equilibrium == TRUE, Uninvadeable == TRUE)
 #proc_abds <- LabelAbds(out_abds) %>% filter(MuB == 0 & SigmaB == 0 | MuA == 0 & SigmaA == 0)
-proc_abds <- LabelAbds(out_abds) %>% filter(Mu == -4)
+proc_abds <- LabelAbds(out_abds) # %>% filter(Mu == -4)
 abd_stats <- GetStatistics(proc_abds)
 pred_stats <- GetPredictions(abd_stats, 10)
 #for(i in 1:nrow(pred_stats)) {
@@ -354,7 +354,7 @@ png("../CavityHOIs-Notes/Coexistence.png", width = 3500, height = 3000, res = 30
 plCoexist
 dev.off()
 
-plHist <- PlotHist(LabelAbds(out_abds_og) %>% filter(Interaction == "Higher Order", Sigma == 1), c(0.5, 1))
+plHist <- PlotHist(LabelAbds(out_abds_og) %>% filter(Interaction %in% c("Pairwise", "Higher Order")), c(0.5, 1))
 show(plHist)
 png("../CavityHOIs-Notes/Histogram.png", width = 2000, height = 1500, res = 300)
 plHist
