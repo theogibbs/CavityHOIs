@@ -2,5 +2,4 @@
 .RDataTmp
 .RData
 .Rhistory
-simdata/
 *.csv
