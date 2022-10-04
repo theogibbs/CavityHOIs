@@ -32,14 +32,14 @@ plSatCorr <- ggplot(melt_stats, aes(x = SigmaB, y = value, color = MuB, shape = 
                                                          strip.text.x = element_text(size = 25),
                                                          strip.text.y = element_text(size = 25),
                                                          legend.text=element_text(size = 25)) +
-  facet_grid(h~SigmaR, scales = "free",  labeller = label_bquote(cols = sigma[R] == .(SigmaR), rows = h == .(h))) +
+  facet_grid(~SigmaR, scales = "free",  labeller = label_bquote(cols = sigma[R] == .(SigmaR), rows = h == .(h))) +
   labs(x = expression("Variation in Interaction Strengths"~(sigma[B])),
        y = expression("Coexisting Fraction"~(phi)),
-       color = expression("Interaction\nStrength"(mu[B])),
-       shape = expression("Interaction\nStrength"(mu[B])))
+       color = expression("Mean\nInteraction\nStrength"(mu[B])),
+       shape = expression("Mean\nInteraction\nStrength"(mu[B])))
 plSatCorr
 
-jpeg("../CavityHOIs-Paper/figs/SIFigSatCorr.jpeg", width = 4000, height = 2100, res = 300)
+jpeg("../CavityHOIs-Paper/figs/SIFigSatCorr.jpeg", width = 4500, height = 1500, res = 300)
 plSatCorr
 dev.off()
 

@@ -35,8 +35,8 @@ plSICubic <- ggplot(melt_stats, aes(x = SigmaB, y = value, color = MuB, shape = 
   facet_grid(SelfReg~SigmaR, scales = "free",  labeller = label_bquote(cols = sigma[R] == .(SigmaR), rows = .(SelfReg))) +
   labs(x = expression("Variation in Interaction Strengths"~(sigma[B])),
        y = expression("Coexisting Fraction"~(phi)),
-       color = expression("Interaction\nStrength"(mu[B])),
-       shape = expression("Interaction\nStrength"(mu[B])))
+       color = expression("Mean\nInteraction\nStrength"(mu[B])),
+       shape = expression("Mean\nInteraction\nStrength"(mu[B])))
 plSICubic
 
 jpeg("../CavityHOIs-Paper/figs/SIFigCubic.jpeg", width = 4000, height = 2100, res = 300)

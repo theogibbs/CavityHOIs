@@ -9,6 +9,7 @@ library(nleqslv)
 library(VGAM)
 library(truncnorm)
 library(gridExtra)
+library(grid)
 
 ## Functions
 
@@ -215,7 +216,7 @@ SatCorrDynamics <- function(time, state, params) {
   return(list(dNdt))
 }
 
-# wrapper to compute derivatives for cubic self-regulation
+# SUPPLEMENTARY: wrapper to compute derivatives for cubic self-regulation
 ConstrainedDynamics <- function(time, state, params) {
   dNdt <- state * GetConstrainedGrowthRates(N = state, pars = params)
   return(list(dNdt))

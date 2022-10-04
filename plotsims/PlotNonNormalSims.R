@@ -13,13 +13,13 @@ pred_stats <- GetPredictions(abd_stats, 10)
 
 melt_stats <- pred_stats %>%
   ungroup() %>%
-  dplyr::select(S, Mu, Sigma, Phi, Interaction) %>%
-  melt(id.vars = c("S", "Mu", "Sigma", "Interaction")) %>%
+  dplyr::select(S, Mu, SigmaB, Phi, Interaction) %>%
+  melt(id.vars = c("S", "Mu", "SigmaB", "Interaction")) %>%
   mutate(Error = pred_stats$ErrorPhi) %>%
   mutate(Prediction = pred_stats$PredFraction) %>%
   mutate(Mu = as.factor(-Mu))
 
-plNonNormal <- ggplot(melt_stats, aes(x = Sigma, y = value, color = Mu, shape = Mu)) +
+plNonNormal <- ggplot(melt_stats, aes(x = SigmaB, y = value, color = Mu, shape = Mu)) +
   geom_errorbar(aes(ymin = value - Error, ymax = value + Error), width = 0, size = 2) +
   geom_point(size = 7) + theme_classic() +
   theme(legend.position = "right",
@@ -29,7 +29,7 @@ plNonNormal <- ggplot(melt_stats, aes(x = Sigma, y = value, color = Mu, shape = 
         strip.text.y = element_text(size = 20),
         strip.background = element_blank(),
         legend.text=element_text(size = 25)) +
-  geom_line(aes(x = Sigma, y = Prediction, color = Mu), size = 3, alpha = 0.6) +
+  geom_line(aes(x = SigmaB, y = Prediction, color = Mu), size = 3, alpha = 0.6) +
   facet_grid(~S, scales = "free", labeller = label_bquote(cols = .(S) ~ "Species")) +
   labs(x = expression("Variation in Interaction Strengths"~(sigma[B])),
        y = expression(atop("Fraction of","Coexisting Species"~(phi))),

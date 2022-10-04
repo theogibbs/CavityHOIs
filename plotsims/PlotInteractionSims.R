@@ -172,31 +172,78 @@ melt_mx_preds <- out_mx_preds %>%
   mutate(Interaction = "(C) Pairwise and higher-order") %>%
   dplyr::rename(Sigma = SigmaB, Mu = MuB)
 
-melt_preds <- rbind(melt_pw_preds, melt_hoi_preds, melt_mx_preds)
-
-plInteractions <- ggplot(melt_preds, aes(x = Sigma, y = value, group = Mu)) +
+plPairwise <- ggplot(melt_pw_preds, aes(x = Sigma, y = value, group = Mu)) +
   geom_line(size = 3, alpha = 0.6, aes(color = Mu, linetype = Mu)) +
-  theme_classic() + theme(legend.position = "top",
-                     text = element_text(size=30),
-                     strip.text.x = element_text(size = 25),
-                     strip.text.y = element_text(size = 25),
-                     strip.background = element_blank(),
-                     legend.text=element_text(size = 25)) +
-  facet_grid(Interaction ~ SigmaR,
+  theme_classic() + theme(legend.position = "right",
+                          legend.text = element_text(color = "white"),
+                          legend.title = element_text(color = "white"),
+                          text = element_text(size=40),
+                          strip.text.x = element_blank(),
+                          strip.text.y = element_text(size = 25),
+                          strip.background = element_blank(),
+                          axis.line = element_line()) +
+  facet_grid(~ SigmaR,
              labeller = label_bquote(rows = .(Interaction), cols = sigma[R] == .(SigmaR)),
-             switch = "y", scales = "free") +
-  labs(x = expression("Variation in Interaction Strengths"~(sigma[A]~"or"~sigma[B])),
-       y = expression("Fraction of Coexisting Species"~(phi)),
-       color = expression("Mean Interaction Strength"~(mu[A]~"or"~mu[B])),
-       linetype = expression("Mean Interaction Strength"~(mu[A]~"or"~mu[B]))) +
-  scale_y_continuous(position = "right") +
+             scales = "free") +
+  labs(x = " ",
+       y = " ",
+       color = expression(atop("Mean\nInteraction\nStrength", (mu[A]~"or"~mu[B]))),
+       linetype = expression(atop("Mean\nInteraction\nStrength", (mu[A]~"or"~mu[B])))) +
+  scale_y_continuous(position = "left") +
   scale_linetype_manual(values=c(1, 2, 6)) +
-  guides(linetype=guide_legend(keywidth = 8, keyheight = 1),
-         color=guide_legend(keywidth = 8, keyheight = 1))
-plInteractions
+  scale_linetype(guide = guide_legend(override.aes = list(alpha = 0) ) )+
+  ggtitle("(A) Pairwise interactions")
+plPairwise
 
-jpeg("../CavityHOIs-Paper/figs/FigInteractions.jpeg", width = 6000, height = 5000, res = 300)
-plInteractions
+plHigherOrder <- ggplot(melt_hoi_preds, aes(x = Sigma, y = value, group = Mu)) +
+  geom_line(size = 3, alpha = 0.6, aes(color = Mu, linetype = Mu)) +
+  theme_classic() + theme(legend.position = "right",
+                          text = element_text(size=40),
+                          strip.text.x = element_blank(),
+                          strip.text.y = element_text(size = 25),
+                          strip.background = element_blank(),
+                          legend.text=element_text(size = 25),
+                          axis.line = element_line()) +
+  facet_grid(~ SigmaR,
+             labeller = label_bquote(rows = .(Interaction), cols = sigma[R] == .(SigmaR)),
+             scales = "free") +
+  labs(x = " ",
+       y = "Fraction of Coexisting Species",
+       color = expression(atop("Mean\nInteraction\nStrength", (mu[A]~"or"~mu[B]))),
+       linetype = expression(atop("Mean\nInteraction\nStrength", (mu[A]~"or"~mu[B])))) +
+  scale_y_continuous(position = "left") +
+  guides(linetype=guide_legend(keywidth = 8, keyheight = 1),
+         color=guide_legend(keywidth = 8, keyheight = 1)) +
+  ggtitle("(B) Higher-order interactions")
+plHigherOrder
+
+plMixed <- ggplot(melt_mx_preds, aes(x = Sigma, y = value, group = Mu)) +
+  geom_line(size = 3, alpha = 0.6, aes(color = Mu, linetype = Mu)) +
+  theme_classic() + theme(legend.position = "right",
+                          legend.text = element_text(color = "white"),
+                          legend.title = element_text(color = "white"),
+                          text = element_text(size=40),
+                          strip.text.x = element_blank(),
+                          strip.text.y = element_text(size = 25),
+                          strip.background = element_blank(),
+                          axis.line = element_line()) +
+  facet_grid(~ SigmaR,
+             labeller = label_bquote(rows = .(Interaction), cols = sigma[R] == .(SigmaR)),
+             scales = "free") +
+  labs(x = expression("Variation in Interaction Strengths"~(sigma[A]~"or"~sigma[B])),
+       y = " ",
+       color = expression(atop("Mean\nInteraction\nStrength", (mu[A]~"or"~mu[B]))),
+       linetype = expression(atop("Mean\nInteraction\nStrength", (mu[A]~"or"~mu[B])))) +
+  scale_y_continuous(position = "left") +
+  scale_linetype_manual(values=c(1, 2, 6)) +
+  scale_linetype(guide = guide_legend(override.aes = list(alpha = 0) ) ) +
+  ggtitle("(C) Pairwise and higher-order interactions")
+plMixed
+
+jpeg("../CavityHOIs-Paper/figs/FigInteractions.jpeg", width = 6000, height = 6600, res = 300)
+grid.arrange(plPairwise, plHigherOrder, plMixed, ncol = 1, nrow = 3,
+             top = grid.text(expression(sigma[R] == 0 ~~~~~~~~~~~~~~~ sigma[R] == 0.25 ~~~~~~~~~~~~~~~ sigma[R] == 0.5 ~~~~~~ " "),
+                             gp=gpar(fontsize=50)))
 dev.off()
 
 # mean interaction strength figure
@@ -298,13 +345,13 @@ plMeanInteractions <- ggplot(melt_preds, aes(x = Mu, y = value, group = Sigma)) 
                           strip.background = element_blank(),
                           legend.text=element_text(size = 25)) +
   facet_grid(Interaction ~ SigmaR,
-             labeller = label_bquote(rows = .(Interaction), cols = sigma[R] == .(SigmaR)),
-             switch = "y", scales = "free") +
+             labeller = label_bquote(rows = .(Interaction),
+                                     cols = sigma[R] == .(SigmaR)),
+            scales = "free") +
   labs(x = expression("Mean Interaction Strength"~(mu[A]~"or"~mu[B])),
        y = expression("Fraction of Coexisting Species"~(phi)),
        color = expression("Variation in Interaction Strengths"~(sigma[A]~"or"~sigma[B])),
        linetype = expression("Variation in Interaction Strengths"~(sigma[A]~"or"~sigma[B]))) +
-  scale_y_continuous(position = "right") +
     scale_linetype_manual(values=c(1, 2, 6)) +
     guides(linetype=guide_legend(keywidth = 8, keyheight = 1),
            color=guide_legend(keywidth = 8, keyheight = 1))

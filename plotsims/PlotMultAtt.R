@@ -17,7 +17,7 @@ att_data <- LabelAbds(out_abds) %>%
   dplyr::summarise(SumStDev = mean(SumStDev, na.rm = TRUE), UFP = mean(UFP)) %>%
   melt(id.vars = c("Mu", "h", "Sigma", "Interaction")) %>%
   mutate(variable = ifelse(variable == "SumStDev", "(A) Average Standard Deviation",
-                           "(B) Probability of Non-invadeable Equilibrium"))
+                           "(B) Probability of Equilibrium"))
 
 plMultAtt <- ggplot(att_data %>% filter(h == 0),
                     aes(x = Sigma, y = value, color = Interaction, shape = Interaction)) +
@@ -33,12 +33,12 @@ plMultAtt <- ggplot(att_data %>% filter(h == 0),
   labs(x = expression("Variation in Interaction Strengths"~(sigma[A]~"or"~sigma[B])), y = " ")
 plMultAtt
 
-jpeg("../CavityHOIs-Paper/figs/SIFigMultAtt.jpeg", width = 4000, height = 1500, res = 300)
+jpeg("../CavityHOIs-Paper/figs/SIFigMultAtt.jpeg", width = 4500, height = 1500, res = 300)
 plMultAtt
 dev.off()
 
 plSatMultAtt <- ggplot(att_data %>% filter(h != 0), aes(x = Sigma, y = value)) +
-  facet_wrap(~variable, scales = "free") +  theme_bw() +
+  facet_wrap(~variable, scales = "free") + theme_bw() +
   theme(legend.position = "right",
         panel.spacing = unit(1, "lines"),
         text = element_text(size=25),

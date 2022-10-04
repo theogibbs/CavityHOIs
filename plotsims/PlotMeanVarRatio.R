@@ -13,7 +13,10 @@ out_abds <- out_abds %>%
 proc_abds <- LabelAbds(out_abds) %>%
   filter(Interaction != "Mixed") %>%
   filter(SigmaR != 0.5) %>%
-  filter(Sigma > 0.01)
+  filter(Sigma > 0.01) %>%
+  filter(!(Mu == -3 & Interaction == "Pairwise")) %>%
+  filter(!(Mu == -4 & Interaction == "Pairwise")) %>%
+  filter(SigmaA != 0.5)
 
 abd_stats <- GetStatistics(proc_abds)
 pred_stats <- GetPredictions(abd_stats, 10)
@@ -37,13 +40,11 @@ plSIMeanVar <- ggplot(melt_stats, aes(x = Sigma, y = value, color = Mu, shape = 
                                                          legend.text=element_text(size = 25)) +
   geom_line(aes(x = Sigma, y = Prediction, color = Mu), size = 1, alpha = 0.6) +
   facet_grid(SigmaR~Interaction, scales = "free",  labeller = label_bquote(cols = .(Interaction), rows = sigma[R] == .(SigmaR))) +
-  labs(x = expression("Interaction Heterogeneity"~(sigma[A]  ~ "or" ~ sigma[B])),
+  labs(x = expression("Variation in Interaction Strengths"~(sigma[A]  ~ "or" ~ sigma[B])),
        y = expression(atop("Non-truncated Mean to", "Standard Deviation Ratio"~(mu[0]/sigma[0]))),
-       color = expression("Interaction\nStrength"(mu[A]  ~ "or" ~ mu[B])),
-       shape = expression("Interaction\nStrength"(mu[A]  ~ "or" ~ mu[B])))
+       color = expression("Mean\nInteraction\nStrength"(mu[A]  ~ "or" ~ mu[B])),
+       shape = expression("Mean\nInteraction\nStrength"(mu[A]  ~ "or" ~ mu[B])))
 plSIMeanVar
-
-# need to fix this code and get rid of the cavity method only plots
 
 jpeg("../CavityHOIs-Paper/figs/SIFigMeanVar.jpeg", width = 4500, height = 3000, res = 300)
 plSIMeanVar

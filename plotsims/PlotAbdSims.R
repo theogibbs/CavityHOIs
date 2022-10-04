@@ -19,13 +19,13 @@ B[B != 0] <- B[B != 0] / sd(B[B != 0]) / S
 B[B != 0] <- B[B != 0] - mean(B[B != 0])
 
 mu_len <- 3
-sigma_len <- 50
+sigma_len <- 100
 
 mu_As <- seq(-1, -2, length.out = mu_len)
-sigma_As <- seq(0.01, 0.85, length.out = sigma_len) # Code breaks if sigma = 0
+sigma_As <- seq(0.01, 0.75, length.out = sigma_len) # Code breaks if sigma = 0
 
 mu_Bs <- seq(-1, -2, length.out = mu_len)
-sigma_Bs <- seq(0.01, 0.85, length.out = sigma_len)  # Code breaks if sigma = 0
+sigma_Bs <- seq(0.01, 0.75, length.out = sigma_len)  # Code breaks if sigma = 0
 
 settings <- list(abd_cutoff = 1e-14, gr_cutoff = 0.01, endtime = 1e7, inimin = 0, inimax = 1)
 
@@ -65,8 +65,8 @@ for(mu in 1:mu_len) {
     
     cur_ints[cur_ints == 0] <- NA
     
-    cur_mean <- S^2 * mean(cur_ints, na.rm = TRUE)
-    cur_sd <- S * sd(cur_ints, na.rm = TRUE)
+    cur_mean <- - S^2 * mean(cur_ints, na.rm = TRUE) / mu_Bs[mu]
+    cur_sd <- S * sd(cur_ints, na.rm = TRUE) / sigma_Bs[sigma]
     
     hoi_data <- cbind(data.frame(Mu = mu_Bs[mu], Sigma = sigma_Bs[sigma],
                                  MeanInt = cur_mean, SdInt = cur_sd,
@@ -90,8 +90,8 @@ for(mu in 1:mu_len) {
     curN <- as.logical(outer(curN, curN))
     cur_ints <- curA[curN]
     cur_ints[cur_ints == 0] <- NA
-    cur_mean <- S * mean(cur_ints, na.rm = TRUE)
-    cur_sd <- sqrt(S) * sd(cur_ints, na.rm = TRUE)
+    cur_mean <- - S * mean(cur_ints, na.rm = TRUE) / mu_As[mu]
+    cur_sd <- sqrt(S) * sd(cur_ints, na.rm = TRUE) / sigma_As[sigma]
     
     pw_data <- cbind(data.frame(Mu = mu_As[mu], Sigma = sigma_As[sigma],
                                 MeanInt = cur_mean, SdInt = cur_sd,
@@ -133,7 +133,9 @@ plot_data <- out_data %>%
   mutate(Mu = as.factor(- Mu)) %>%
   mutate(MeanInt = - MeanInt) %>%
   melt(id.vars = c("Mu", "Sigma", "Interaction")) %>%
-  mutate(variable = ifelse(variable == "MeanInt", "Realized Mean", "Realized Standard Deviation"))
+  mutate(variable = ifelse(variable == "MeanInt",
+                           "Realized to Pool Mean Ratio",
+                           "Realized to Pool SD Ratio"))
 
 plAbdInts <- ggplot(plot_data, aes(x = Sigma, y = value, color = Mu)) +
   geom_line(size = 0.75, alpha = 0.5) +
